@@ -78,7 +78,7 @@ pub fn run(file_to_find: &String) -> Result<(), Box<dyn Error>> {
             if result.len() == 1 {
                 println!("File found: {}", result[0]);
             } else {
-                println!("Files found: \n");
+                println!("Files found:");
                 result.into_iter().for_each(| file |{
                     println!("{}", file);
                 });
@@ -89,6 +89,7 @@ pub fn run(file_to_find: &String) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// Currently does not work
 fn get_hash_cache(cache_path: &PathBuf) -> Result<HashSet<CachedFile>, Box<dyn Error>> {
     let mut set: HashSet<CachedFile> = HashSet::new();
     std::fs::read_to_string(cache_path)?.lines()
