@@ -166,8 +166,11 @@ fn fill_cache(path: String, cache_path: &PathBuf) -> Result<HashSet<CachedFile>,
             writeln!(cache_file, "{}", path_as_string)?;
             cache_set.insert(cached_file);
         } else {
-            cache_set.take(&cached_file).expect("Something went wrong getting the cached file")
-                                       .paths.push(String::from(path_as_str));
+            let mut taken = cache_set.take(&cached_file).expect("Something went wrong getting the cached file");
+            if !taken.paths.contains(&path_as_string) {
+                taken.paths.push(path_as_string);
+            }
+            cache_set.insert(taken);
         }
     }
     Ok(cache_set)
