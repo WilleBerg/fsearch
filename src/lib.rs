@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::process;
 use std::{error::Error, path::PathBuf};
 use std::path::Path;
 use walkdir::WalkDir;
@@ -9,18 +10,27 @@ use std::hash::{Hash, Hasher};
 const CACHE_FILE_NAME: &str = "cache";
 const CACHE_SAVE_PATH: &str = "C:\\Users\\willi\\Documents\\GitHub\\fsearch";
 
-
 pub struct Config {
     pub search_term: String,
+    pub nightly: bool,
 }
 
 impl Config {
     pub fn build(args: &Vec<String>) -> Result<Config, &'static str> {
+        let mut nightly: bool = false;
         if args.len() < 2 {
             return Err("Not enough arguments");
         }
+        if args.len() == 3 {
+            if args[2].contains("--") {
+                match args[2].as_str() {
+                    "--nightly" => nightly = true,
+                    _ => println!("Unknown flag. Using default."),
+                }
+            }
+        }
         let search_term: String = args[1].clone();
-        Ok(Config { search_term })
+        Ok(Config { search_term, nightly })
     }
 }
 
@@ -56,36 +66,45 @@ impl Hash for CachedFile {
     }
 }
 
-pub fn run(file_to_find: &String) -> Result<(), Box<dyn Error>> {
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     // let root_dir = "C:\\"; // Replace with your desired directory
+
+    let file_to_find = &config.search_term;
+    let nightly = config.nightly;
+    println!("File to find: {}\nNightly: {}", file_to_find, nightly);
+
+
     let root_dir = "C:\\Users\\willi\\Documents\\GitHub\\fsearch";
     let cache_path_part = Path::new(CACHE_SAVE_PATH);
     let cache_path = cache_path_part.join(CACHE_FILE_NAME);
-
-    let cache: HashSet<CachedFile>;
-    if cache_exists(&cache_path).unwrap() {
-        cache = match get_hash_cache(&cache_path) {
-            Ok(set) => set,
-            Err(_) => {
-                panic!("Error while reading cache");
-            }
-        }
+    if nightly {
+        fill_cache_multi_threaded(String::from(root_dir), &cache_path);
     } else {
-        cache = fill_cache(String::from(root_dir), &cache_path).unwrap();
-    }
-    let search_result = search_cache(file_to_find, &cache);
-    match search_result {
-        Some(result) => {
-            if result.len() == 1 {
-                println!("File found: {}", result[0]);
-            } else {
-                println!("Files found:");
-                result.into_iter().for_each(| file |{
-                    println!("{}", file);
-                });
+        let cache: HashSet<CachedFile>;
+        if cache_exists(&cache_path).unwrap() {
+            cache = match get_hash_cache(&cache_path) {
+                Ok(set) => set,
+                Err(_) => {
+                    panic!("Error while reading cache");
+                }
             }
-        },
-        None => println!("No file found"),
+        } else {
+            cache = fill_cache(String::from(root_dir), &cache_path).unwrap();
+        }
+        let search_result = search_cache(file_to_find, &cache);
+        match search_result {
+            Some(result) => {
+                if result.len() == 1 {
+                    println!("File found: {}", result[0]);
+                } else {
+                    println!("Files found:");
+                    result.into_iter().for_each(| file |{
+                        println!("{}", file);
+                    });
+                }
+            },
+            None => println!("No file found"),
+        }
     }
     Ok(())
 }
@@ -187,12 +206,40 @@ fn fill_cache(path: String, cache_path: &PathBuf) -> Result<HashSet<CachedFile>,
 fn fill_cache_multi_threaded(path: String, cache_path: &PathBuf) -> Result<HashSet<CachedFile>, Box<dyn Error>> {
     let dirs = std::fs::read_dir(path)?;
     let dir_vec: Vec<_> = dirs.collect();
-    let dir_vecdeq: VecDeque<_> = dir_vec.into_iter().collect();
+    let mut dir_vecdeq: VecDeque<_> = dir_vec.into_iter()
+                                             .map(|e| e.ok())
+                                             .filter_map(|entry|{
+                                                if let Some(en) = entry {
+                                                    if en.path().is_dir() {
+                                                        Some(en)
+                                                    } else {
+                                                        None
+                                                    }
+                                                } else {
+                                                    None
+                                                }
+                                             }).collect::<VecDeque<_>>();
+    let r_set: HashSet<CachedFile> = HashSet::new();
     while dir_vecdeq.len() < 10 {
-        let curr = dir_vecdeq.pop_front().unwrap().unwrap();
-        let tmp = std::fs::read_dir(curr.path())?.collect::<Vec<>>();
+        let curr = dir_vecdeq.pop_front().unwrap();
+        let tmp = std::fs::read_dir(curr.path())?.collect::<Vec<_>>();
+        tmp.into_iter().map(|e| e.ok())
+                       .filter_map(|entry|{
+                            if let Some(en) = entry {
+                                if en.path().is_dir() {
+                                    Some(en)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                            }).for_each(|a| dir_vecdeq.push_back(a));
     }
-
+    while let Some(entries) = dir_vecdeq.pop_front() {
+            println!("A file: {}", entries.path().as_os_str().to_str().unwrap());
+    }
+    Ok(r_set)
 }
 
 fn get_file_paths(path: &String) -> Vec<String> {
