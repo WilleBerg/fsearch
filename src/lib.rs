@@ -15,6 +15,7 @@ pub struct Config {
     pub search_term: String,
     pub nightly: bool,
     pub fresh: bool,
+    pub verbose: bool,
     pub thread_count: usize,
 }
 
@@ -23,6 +24,7 @@ impl Config {
         let mut nightly: bool = false;
         let mut thread_count: usize = 10;
         let mut fresh: bool = false;
+        let mut verbose: bool = false;
         if args.len() < 2 {
             return Err("Not enough arguments");
         }
@@ -35,13 +37,14 @@ impl Config {
                     match arg.as_str() {
                         "--nightly" => nightly = true,
                         "--fresh" => fresh = true,
+                        "--verbose" => verbose = true,
                         _ => println!("Unknown flag {}", arg),
                     }
                 }
             }
         }
         let search_term: String = args[1].clone();
-        Ok(Config { search_term, nightly, thread_count, fresh})
+        Ok(Config { search_term, nightly, thread_count, fresh, verbose })
     }
 }
 
@@ -218,75 +221,7 @@ fn fill_cache(path: String, cache_path: &PathBuf) -> Result<HashSet<CachedFile>,
 fn fill_cache_multi_threaded(path: String, cache_path: &PathBuf, thread_count: usize, config: &Config)
     -> Result<HashSet<CachedFile>, Box<dyn Error>> 
 {
-    let dirs = std::fs::read_dir(path)?;
-    let dir_vec: Vec<_> = dirs.collect();
-    let mut dir_vecdeq: VecDeque<_> = dir_vec.into_iter()
-                                             .map(|e| e.ok())
-                                             .filter_map(|entry|{
-                                                if let Some(en) = entry {
-                                                    if en.path().is_dir() {
-                                                        Some(en)
-                                                    } else {
-                                                        None
-                                                    }
-                                                } else {
-                                                    None
-                                                }
-                                             }).collect::<VecDeque<_>>();
-    while dir_vecdeq.len() < 10 {
-        let curr = dir_vecdeq.pop_front().unwrap();
-        let tmp = std::fs::read_dir(curr.path())?.collect::<Vec<_>>();
-        tmp.into_iter().map(|e| e.ok())
-                       .filter_map(|entry|{
-                            if let Some(en) = entry {
-                                if en.path().is_dir() {
-                                    Some(en)
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                            }).for_each(|a| dir_vecdeq.push_back(a));
-    }
-    let safe_q: Arc<Mutex<VecDeque<DirEntry>>> = Arc::new(Mutex::new(dir_vecdeq));
-    let safe_set: Arc<Mutex<HashSet<PathBuf>>> = Arc::new(Mutex::new(HashSet::new()));
-    let mut handles = vec![];
-    for thread_id in 0..thread_count {
-        let work_q_clone = Arc::clone(&safe_q);
-        let safe_set_clone = Arc::clone(&safe_set);
-        let handle = thread::spawn(move || {
-            spawn_worker(work_q_clone, thread_id, safe_set_clone);
-        });
-        println!("Thread spawned with ID: {}", thread_id);
-        handles.push(handle);
-    }
-    for handle in handles {
-        handle.join().unwrap();
-    }
-    // let r_set = safe_set.lock().unwrap().clone();
-    let mut r_set = HashSet::new();
-    for item in safe_set.lock().unwrap().iter() {
-        if item.is_dir() {
-            continue;
-        }
-        let path = item.to_str().unwrap();
-        let cache_file = CachedFile::create(path);
-        let s_path = split_path(path);
-        if r_set.contains(&cache_file) {
-            let mut taken: CachedFile = r_set.take(&cache_file).unwrap();
-            if !taken.paths.contains(&s_path.0) {
-                taken.paths.push(s_path.0);
-            }
-            r_set.insert(taken);
-        } else {
-            r_set.insert(cache_file);
-        }
-    }
-
-
-    write_hash_to_cache(&r_set, cache_path, &config)?;
-    Ok(r_set)
+    
 }
 
 fn write_hash_to_cache(set: &HashSet<CachedFile>, cache_path: &PathBuf, config: &Config) -> Result<(), Box<dyn Error>> {
@@ -310,42 +245,4 @@ fn write_hash_to_cache(set: &HashSet<CachedFile>, cache_path: &PathBuf, config: 
         }
     }
     Ok(())
-}
-
-fn spawn_worker(work_queue: Arc<Mutex<VecDeque<DirEntry>>>, 
-                thread_id: usize, 
-                set: Arc<Mutex<HashSet<PathBuf>>>) 
-{
-    loop {
-        let path: DirEntry;
-        {
-            let mut queue = work_queue.lock().unwrap();
-            if queue.is_empty() {
-                println!("Thread with ID {} done", thread_id);
-                break;
-            }
-            path = queue.pop_front().unwrap();
-        }
-        // Should always be a dir.
-        let it_dir = std::fs::read_dir(path.path()).unwrap();
-        it_dir.for_each(|item| {
-            match item {
-                Ok(val) => {
-                    if val.path().is_dir() {
-                        let mut set = set.lock().unwrap();
-                        if !set.contains(&val.path()) {
-                            let mut queue = work_queue.lock().unwrap();
-                            set.insert(val.path().clone());
-                            queue.push_back(val);
-                            println!("Queue size: {}", queue.len());
-                        }
-                    } else {
-                        let mut set = set.lock().unwrap();
-                        set.insert(val.path());
-                    }
-                }
-                Err(e) => eprintln!("error reading path: {e}"),
-            }
-        })
-    }
 }
