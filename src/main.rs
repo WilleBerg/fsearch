@@ -1,4 +1,4 @@
-use fsearch::Config;
+use fsearch::config::Config;
 use std::env;
 
 fn main() {
