@@ -21,7 +21,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let nightly = config.nightly;
     println!("File to find: {}\nNightly: {}", file_to_find, nightly);
 
-    let root_dir = "/home";
+    let root_dir = "/";
     #[cfg(target_os = "windows")]
     {
         // root_dir = "C:\\Users\\willi";
