@@ -4,6 +4,7 @@ use std::path::Path;
 use std::fs::{ File, OpenOptions};
 use walkdir::WalkDir;
 use crate::config::Config;
+use regex::Regex;
 
 pub mod config;
 pub mod cached_file;
@@ -30,7 +31,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let cache_path_part = Path::new(CACHE_SAVE_PATH);
     let cache_path = cache_path_part.join(CACHE_FILE_NAME);
     if nightly {
-        // fill_cache_multi_threaded(String::from(root_dir), &cache_path, config.thread_count, &config)?;
+        fill_cache_multithread(String::from(root_dir), &cache_path, &config)?;
     } else {
         let result: Vec<String>;
         if cache_exists(&cache_path, &config).unwrap() {
@@ -44,6 +45,36 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
+
+fn fill_cache_multithread(path: String, cache_path: &PathBuf, conf: &Config)
+    -> Result<Vec<String>, Box<dyn Error>>
+{
+    let return_vec: Vec<String> = vec![];
+    let mut paths: Vec<PathBuf> = vec![];
+
+    let mut curr_dir: PathBuf = PathBuf::from(path);
+    while paths.len() < conf.thread_count {
+        let mut found_dir: bool = false;
+        for item in std::fs::read_dir(&curr_dir).unwrap() {
+            let path_buf = item.unwrap().path().clone();
+            if path_buf.is_dir() {
+                if found_dir {
+                    curr_dir = path_buf;
+                    found_dir = true;
+                } else {
+                    paths.push(path_buf);
+                }
+            }
+        }
+    }
+    for item in paths {
+        println!("{}", item.to_str().unwrap());
+    }
+
+    Ok(return_vec)
+}
+
+// fn worker_function()
 
 /// Checks if cache file exists.
 ///
@@ -72,7 +103,13 @@ fn search_cache_file(cache_path: &PathBuf, conf: &Config) -> Vec<String>{
 }
 
 /// Fills the cache file with all files found recursively starting `cache_path`.
-fn fill_cache(path: String, cache_path: &PathBuf, conf: &Config) -> Result<Vec<String>, Box<dyn Error>> {
+/// If a file matching the search string, it is added to the return `Vec`.
+///
+/// # Returns:
+/// A vector of matching strings.
+fn fill_cache(path: String, cache_path: &PathBuf, conf: &Config) 
+    -> Result<Vec<String>, Box<dyn Error>> 
+{
     let cache_file_path = cache_path;
 
     // Error handling please!~!!!!
@@ -82,21 +119,29 @@ fn fill_cache(path: String, cache_path: &PathBuf, conf: &Config) -> Result<Vec<S
         .open(&cache_file_path)?;
 
     let mut return_vec: Vec<String> = Vec::new();
+    let rgx: Regex = match Regex::new(&conf.search_term) {
+        Ok(expr) => expr,
+        Err(e) => {
+            eprintln!("failed to create regex: {e}");
+            std::process::exit(0);
+        },
+    };
     // Recursively iterate over directory contents
     println!("Filling cache...");
     for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
 
-        // Skip if the path is not a file
         if !path.is_file() {
             continue;
         }
 
-        // Writes to cache if file isn't already there
-        let path_as_string = path.as_os_str().to_str().unwrap().to_string();
-        writeln!(cache_file, "{}", path_as_string)?;
-        if path_as_string.contains(&conf.search_term) {
-            return_vec.push(path_as_string);
+        let path_as_str = path.as_os_str().to_str().unwrap();
+        writeln!(cache_file, "{}", path_as_str)?;
+        // if path_as_string.contains(&conf.search_term) {
+        //     return_vec.push(path_as_string);
+        // }
+        if rgx.is_match(path_as_str){
+             return_vec.push(path_as_str.to_string());
         }
     }
     Ok(return_vec)
