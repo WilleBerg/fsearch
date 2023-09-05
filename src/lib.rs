@@ -1,16 +1,17 @@
+use crate::config::Config;
+use regex::Regex;
 use std::collections::VecDeque;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::{error::Error, path::PathBuf};
-use std::path::Path;
-use std::fs::{ File, OpenOptions};
 use walkdir::WalkDir;
-use crate::config::Config;
-use regex::Regex;
 
-pub mod config;
 pub mod cached_file;
+pub mod config;
+pub mod search;
 
 // const CACHE_FILE_NAME: &str = "cache";
 // const CACHE_SAVE_PATH: &str = "C:\\Users\\willi\\Documents\\GitHub\\fsearch";
@@ -33,31 +34,42 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     }
     let cache_path_part = Path::new(CACHE_SAVE_PATH);
     let cache_path = cache_path_part.join(CACHE_FILE_NAME);
-    if nightly {
-        fill_cache_multithread(String::from(root_dir), &cache_path, &config)?;
-    } else {
-        let result: Vec<String>;
-        if cache_exists(&cache_path, &config).unwrap() {
-            result = search_cache_file(&cache_path, &config);
-        } else {
-            result = fill_cache(String::from(root_dir), &cache_path, &config).unwrap();
-        }
-        result.clone().into_iter().for_each(| file |{
-            println!("{}", file);
-        });
-        println!("{}", result.len());
+
+    if !cache_exists(&cache_path, &config).expect("Error looking for cache") {
+        println!("hello");
+        let files = fill_cache_multithread(String::from(root_dir), &cache_path, &config)?;
+        write_to_cache(&cache_path, files, &config)?;
+    }
+    search::run_ngram_approach_v2(&file_to_find);
+    Ok(())
+}
+
+fn write_to_cache(
+    cache_path: &PathBuf,
+    files: Vec<String>,
+    _config: &Config,
+) -> Result<(), Box<dyn Error>> {
+    let mut cache_file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .open(&cache_path)?;
+    for file in files {
+        writeln!(cache_file, "{}", file)?;
     }
     Ok(())
 }
 
-fn fill_cache_multithread(path: String, cache_path: &PathBuf, conf: &Config)
-    -> Result<Vec<String>, Box<dyn Error>>
-{
-    let return_vec: Vec<String> = vec![];
+fn fill_cache_multithread(
+    path: String,
+    cache_path: &PathBuf,
+    conf: &Config,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut return_vec: Vec<String>;
     let paths_q = Arc::new(Mutex::new(VecDeque::new()));
     let paths_vec = Arc::new(Mutex::new(Vec::new()));
     let mut counter = 0;
     let mut curr_dir: PathBuf = PathBuf::from(path);
+    // Remake this
     while counter < conf.thread_count {
         let mut found_dir: bool = false;
         for item in std::fs::read_dir(&curr_dir).unwrap() {
@@ -87,20 +99,27 @@ fn fill_cache_multithread(path: String, cache_path: &PathBuf, conf: &Config)
     for handle in handles {
         handle.join().unwrap();
     }
-    let mut counter = 0;
-    for item in paths_vec.lock().unwrap().iter() {
-        println!("{}", item);
-        counter += 1;
-    }
-    println!("{}", counter);
+    // let mut counter = 0;
+    // for item in paths_vec.lock().unwrap().iter() {
+    //     println!("{}", item);
+    //     counter += 1;
+    // }
+    // println!("{}", counter);
+    return_vec = paths_vec
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|s| s.clone())
+        .collect();
     Ok(return_vec)
 }
 
-fn worker_function(safe_q: Arc<Mutex<VecDeque<PathBuf>>>, 
-                   safe_vec: Arc<Mutex<Vec<String>>>,
-                   search_term: String,
-                   verbose: bool)
-{
+fn worker_function(
+    safe_q: Arc<Mutex<VecDeque<PathBuf>>>,
+    safe_vec: Arc<Mutex<Vec<String>>>,
+    search_term: String,
+    verbose: bool,
+) {
     let mut matching: Vec<String> = Vec::new();
     loop {
         let path: PathBuf;
@@ -139,10 +158,8 @@ fn worker_function(safe_q: Arc<Mutex<VecDeque<PathBuf>>>,
 
 /// Checks if cache file exists.
 ///
-/// Returns true if it exists, false if it doesn't (or flag --fresh was user)
-fn cache_exists(cache_path: &PathBuf, conf: &Config)
-    -> Result<bool, Box<dyn Error>> 
-{
+/// Returns true if it exists, false if it doesn't (or flag --fresh was used)
+fn cache_exists(cache_path: &PathBuf, conf: &Config) -> Result<bool, Box<dyn Error>> {
     if conf.fresh || !cache_path.exists() || !cache_path.is_file() {
         match File::create(cache_path) {
             Ok(_) => return Ok(false),
@@ -153,7 +170,7 @@ fn cache_exists(cache_path: &PathBuf, conf: &Config)
     }
 }
 
-fn search_cache_file(cache_path: &PathBuf, conf: &Config) -> Vec<String>{
+fn search_cache_file(cache_path: &PathBuf, conf: &Config) -> Vec<String> {
     let mut return_vec: Vec<String> = Vec::new();
     std::fs::read_to_string(cache_path)
         .expect("somethign went wrong reading file")
@@ -171,9 +188,11 @@ fn search_cache_file(cache_path: &PathBuf, conf: &Config) -> Vec<String>{
 ///
 /// # Returns:
 /// A vector of matching strings.
-fn fill_cache(path: String, cache_path: &PathBuf, conf: &Config) 
-    -> Result<Vec<String>, Box<dyn Error>> 
-{
+fn fill_cache(
+    path: String,
+    cache_path: &PathBuf,
+    conf: &Config,
+) -> Result<Vec<String>, Box<dyn Error>> {
     let cache_file_path = cache_path;
 
     // Error handling please!~!!!!
@@ -188,7 +207,7 @@ fn fill_cache(path: String, cache_path: &PathBuf, conf: &Config)
         Err(e) => {
             eprintln!("failed to create regex: {e}");
             std::process::exit(0);
-        },
+        }
     };
     // Recursively iterate over directory contents
     println!("Filling cache...");
@@ -204,8 +223,8 @@ fn fill_cache(path: String, cache_path: &PathBuf, conf: &Config)
         // if path_as_string.contains(&conf.search_term) {
         //     return_vec.push(path_as_string);
         // }
-        if rgx.is_match(path_as_str){
-             return_vec.push(path_as_str.to_string());
+        if rgx.is_match(path_as_str) {
+            return_vec.push(path_as_str.to_string());
         }
     }
     Ok(return_vec)

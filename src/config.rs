@@ -39,7 +39,7 @@ impl Config {
                         Err(e) => {
                             eprintln!("error parsing: {e}");
                             std::process::exit(0);
-                        },
+                        }
                     };
                     own_thread_count = false;
                 }
@@ -51,13 +51,20 @@ impl Config {
                         "--thread-count" => {
                             own_thread_count = true;
                             continue;
-                        },
+                        }
                         _ => println!("Unknown flag {}", arg),
                     }
                 }
             }
         }
         let search_term: String = args[1].clone();
-        Ok(Config { search_term, nightly, thread_count, fresh, verbose, search_path })
+        Ok(Config {
+            search_term,
+            nightly,
+            thread_count,
+            fresh,
+            verbose,
+            search_path,
+        })
     }
 }
