@@ -7,6 +7,7 @@ pub struct Config {
     pub verbose: bool,
     pub thread_count: usize,
     pub search_path: PathBuf,
+    pub max_results: u32,
 }
 
 impl Config {
@@ -15,6 +16,7 @@ impl Config {
         let mut thread_count: usize = 10;
         let mut fresh: bool = false;
         let mut verbose: bool = false;
+        let mut max_results: u32 = 25;
         let mut search_path: PathBuf = std::env::current_dir().unwrap();
         if args.len() < 2 {
             return Err("Not enough arguments");
@@ -25,12 +27,33 @@ impl Config {
             args_iter.next();
             let mut own_path: bool = true;
             let mut own_thread_count: bool = false;
-            for arg in args_iter {
+            let mut arg = args_iter.next().unwrap();
+            loop {
                 if own_path {
                     // Might not work
                     if !arg.contains("--") {
                         own_path = false;
-                        search_path = PathBuf::from(arg);
+                        if arg.chars().nth(0).unwrap() == '\"' {
+                            let mut tmp = "".to_string();
+                            loop {
+                                tmp += arg;
+                                arg = match args_iter.next() {
+                                    Some(val) => {
+                                        if val.contains('\"') {
+                                            search_path = PathBuf::from(arg.trim_matches('\"'));
+                                            break;
+                                        }
+                                        val
+                                    },
+                                    None => {
+                                        search_path = PathBuf::from(arg.trim_matches('\"'));
+                                        break;
+                                    }
+                                }
+                            }
+                        } else {
+                            search_path = PathBuf::from(arg);
+                        }
                     }
                 }
                 if own_thread_count {
@@ -52,8 +75,19 @@ impl Config {
                             own_thread_count = true;
                             continue;
                         }
+                        "--max-results" => {
+                            max_results = match args_iter.next() {
+                                Some(val) => val.parse().expect("Enter a number for max results."),
+                                None => break,
+                            }
+                        }
                         _ => println!("Unknown flag {}", arg),
                     }
+                }
+
+                arg = match args_iter.next() {
+                    Some(val) => val,
+                    None => break,
                 }
             }
         }
@@ -65,6 +99,7 @@ impl Config {
             fresh,
             verbose,
             search_path,
+            max_results,
         })
     }
 }
