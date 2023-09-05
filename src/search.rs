@@ -3,16 +3,17 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-const MAX_NGRAMS: u32 = 1_000;
-const PRINT_DEBUG: bool = true;
+use crate::config::Config;
 
-const NGRAM_WEIGHT: u32 = 3;
-const FILENAME_WEIGHT: u32 = 6;
+const MAX_NGRAMS: u32 = 1_000;
+const PRINT_DEBUG: bool = false;
+
+const NGRAM_WEIGHT: u32 = 1;
+const FILENAME_WEIGHT: u32 = 2;
 
 const NGRAM_SIZE: u32 = 3;
-const MAX_PRINTS: usize = 25;
 
-pub fn run_ngram_approach_v2(input: &String) {
+pub fn run_ngram_approach_v2(input: &String, config: &Config) {
     let print_verbose = if PRINT_DEBUG {
         |s: &str| {
             println!("{}", s);
@@ -25,7 +26,7 @@ pub fn run_ngram_approach_v2(input: &String) {
     let mut amount_matching_ngrams: HashMap<String, u32> = HashMap::new();
 
     print_verbose("Reading cache file");
-    // TODO: Change this so cache path is passed through funciton intead.
+    // TODO: Change this so cache path is passed through funciton instead.
     let cache_line: Vec<String> = std::fs::read_to_string("./cache")
         .unwrap()
         .lines()
@@ -88,33 +89,40 @@ pub fn run_ngram_approach_v2(input: &String) {
         }
     });
 
-    print_verbose("Done creating ngrams, now filling result");
-    for (k, _) in &amount_matching_ngrams {
-        let lev_dist = lev_dist_v2(&k, &input);
-        result.push((&k, lev_dist as i32));
-    }
-    print_verbose("Result fill done");
     handle.join().unwrap();
     print_verbose("Thread done");
+    print_verbose("Done creating ngrams, now filling result");
+    for (k, _) in &amount_matching_ngrams {
+        // let lev_dist = lev_dist_v2(&k, &input);
+        result.push((&k, *sort_key_val.lock().unwrap().get(k).unwrap()));
+    }
+    print_verbose("Result fill done");
     print_verbose("Now sorting result");
-    result.sort_by_key(|e| {
-        e.1 + sort_key_val.lock().unwrap().get(e.0).unwrap()
+    result.sort_unstable_by_key(|e| {
+        e.1
+        // e.1 + sort_key_val.lock().unwrap().get(e.0).unwrap()
         // e.1 - (*amount_matching_ngrams.get(e.0).unwrap_or(&0) * NGRAM_WEIGHT) as i32 + (filename_lev_distance(&e.0, input) * FILENAME_WEIGHT) as i32
     });
 
+    let mut output_strings = vec![];
     let mut c = 0;
-    println!("Top results:");
     for res in &result {
-        println!(
-            "{}, {}",
-            res.0,
-            res.1 + sort_key_val.lock().unwrap().get(res.0).unwrap() // res.1 - (*amount_matching_ngrams.get(res.0).unwrap_or(&0) * NGRAM_WEIGHT) as i32 + (filename_lev_distance(&res.0, input) * FILENAME_WEIGHT) as i32
-        );
+        output_strings.push(
+            format!(
+                "{}, {}",
+                res.0,
+                res.1 // res.1 - (*amount_matching_ngrams.get(res.0).unwrap_or(&0) * NGRAM_WEIGHT) as i32 + (filename_lev_distance(&res.0, input) * FILENAME_WEIGHT) as i32
+                )
+            );
         c += 1;
-        if c == MAX_PRINTS {
-            println!("...\n+ {} results.", result.len() - MAX_PRINTS);
+        if c == config.max_results {
+            output_strings.push(format!("+ {} results.\n...", result.len() - config.max_results as usize));
             break;
         }
+    }
+    output_strings.reverse();
+    for out in output_strings {
+        println!("{}", out);
     }
 }
 

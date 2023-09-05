@@ -13,8 +13,6 @@ pub mod cached_file;
 pub mod config;
 pub mod search;
 
-// const CACHE_FILE_NAME: &str = "cache";
-// const CACHE_SAVE_PATH: &str = "C:\\Users\\willi\\Documents\\GitHub\\fsearch";
 const CACHE_FILE_NAME: &str = "cache";
 const CACHE_SAVE_PATH: &str = "./";
 
@@ -36,11 +34,10 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let cache_path = cache_path_part.join(CACHE_FILE_NAME);
 
     if !cache_exists(&cache_path, &config).expect("Error looking for cache") {
-        println!("hello");
         let files = fill_cache_multithread(String::from(root_dir), &cache_path, &config)?;
         write_to_cache(&cache_path, files, &config)?;
     }
-    search::run_ngram_approach_v2(&file_to_find);
+    search::run_ngram_approach_v2(&file_to_find, &config);
     Ok(())
 }
 
@@ -61,15 +58,15 @@ fn write_to_cache(
 
 fn fill_cache_multithread(
     path: String,
-    cache_path: &PathBuf,
+    _cache_path: &PathBuf,
     conf: &Config,
 ) -> Result<Vec<String>, Box<dyn Error>> {
-    let mut return_vec: Vec<String>;
+    let return_vec: Vec<String>;
     let paths_q = Arc::new(Mutex::new(VecDeque::new()));
     let paths_vec = Arc::new(Mutex::new(Vec::new()));
     let mut counter = 0;
     let mut curr_dir: PathBuf = PathBuf::from(path);
-    // Remake this
+
     while counter < conf.thread_count {
         let mut found_dir: bool = false;
         for item in std::fs::read_dir(&curr_dir).unwrap() {
@@ -86,7 +83,7 @@ fn fill_cache_multithread(
         }
     }
     let mut handles = vec![];
-    for thread_id in 0..conf.thread_count {
+    for _thread_id in 0..conf.thread_count {
         let q_clone = paths_q.clone();
         let v_clone = paths_vec.clone();
         let st_clone = conf.search_term.clone();
@@ -149,9 +146,10 @@ fn worker_function(
             }
 
             let path_as_string = path.as_os_str().to_str().unwrap().to_string();
-            if path_as_string.contains(&search_term) {
-                matching.push(path_as_string);
-            }
+            // if path_as_string.contains(&search_term) {
+            //     matching.push(path_as_string);
+            // }
+            matching.push(path_as_string);
         }
     }
 }
