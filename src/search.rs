@@ -5,10 +5,7 @@ use std::thread;
 
 use crate::config::Config;
 
-const MAX_NGRAMS: u32 = 1_000;
-
 const FILENAME_WEIGHT: u32 = 2;
-
 const NGRAM_SIZE: u32 = 3;
 const NGRAM_WEIGHT: u32 = 1;
 const NGRAM_MIN_MATCHES: u32 = 3;
@@ -211,7 +208,8 @@ fn filename_lev_distance(full_path: &String, search_term: &String) -> u32 {
     lev_dist_v2(&file_name.to_string(), search_term)
 }
 
-fn generate_ngrams<'a>(size: u32, vec: &Vec<&'a String>) -> HashMap<String, Vec<&'a String>> {
+/// Legacy function. Not used anymore.
+fn _generate_ngrams<'a>(size: u32, vec: &Vec<&'a String>) -> HashMap<String, Vec<&'a String>> {
     let mut hmap: HashMap<String, Vec<&String>> = HashMap::new();
     for entry in vec {
         // println!("{}", entry);
@@ -259,7 +257,8 @@ fn generate_ngrams_bytes<'a>(
     hmap
 }
 
-fn generate_ngram(size: u32, word: &String) -> Vec<String> {
+/// Legacy function. Not used anymore.
+fn _generate_ngram(size: u32, word: &String) -> Vec<String> {
     let mut rvec: Vec<String> = vec![];
     for i in 0..(word.len() - size as usize) {
         let ngram = match word.get((0 + i)..(size as usize + i)) {
