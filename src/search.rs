@@ -1,20 +1,21 @@
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::config::Config;
 
 const MAX_NGRAMS: u32 = 1_000;
-const PRINT_DEBUG: bool = false;
 
-const NGRAM_WEIGHT: u32 = 1;
 const FILENAME_WEIGHT: u32 = 2;
 
 const NGRAM_SIZE: u32 = 3;
+const NGRAM_WEIGHT: u32 = 1;
+const NGRAM_MIN_MATCHES: u32 = 3;
+const NGRAMS_PER_THREAD: u32 = 1_000;
 
 pub fn run_ngram_approach_v2(input: &String, config: &Config) {
-    let print_verbose = if PRINT_DEBUG {
+    let print_verbose = if config.verbose {
         |s: &str| {
             println!("{}", s);
         }
@@ -23,67 +24,144 @@ pub fn run_ngram_approach_v2(input: &String, config: &Config) {
     };
 
     let mut result: Vec<(&String, i32)> = vec![];
-    let mut amount_matching_ngrams: HashMap<String, u32> = HashMap::new();
+    let amount_matching_ngrams: Arc<Mutex<HashMap<String, u32>>> = Arc::new(Mutex::new(HashMap::new()));
 
     print_verbose("Reading cache file");
     // TODO: Change this so cache path is passed through funciton instead.
-    let cache_line: Vec<String> = std::fs::read_to_string("./cache")
+    let cache_lines: Vec<String> = std::fs::read_to_string("./cache")
         .unwrap()
         .lines()
         .map(|s| s.to_string())
         .collect();
 
-    let mut current_line: u32 = 0;
 
-    // let input_ngrams = generate_ngram(3, &input);
     let input_ngrams = generate_ngram_bytes(NGRAM_SIZE, &input);
 
     print_verbose("Beginning ngram creation");
+    // Split up cache file in to queue of vectors of strings (1000 in each?)
+    // Spawn threads
+    //
+    let line_queue: Arc<Mutex<VecDeque<Vec<String>>>> = Arc::new(Mutex::new(VecDeque::new()));
+    let mut tmp_counter = 0;
+    let mut tmp_vec: Vec<String> = vec![];
+    let mut line_counter: usize = 0;
+    // TODO: Double check efficiency of this (the .iter() call etc.)
+    // Also aquire lock for queue and then drop after length call pls
     loop {
-        print_verbose(format!("Size of hashmap: {}", amount_matching_ngrams.len()).as_str());
-        let mut tmp: Vec<&String> = vec![];
-        loop {
-            tmp.push(if let Some(val) = cache_line.get(current_line as usize) {
-                &val
-            } else {
-                current_line += 1;
-                continue;
-            });
-            current_line += 1;
-            if current_line % MAX_NGRAMS == 0 || current_line >= cache_line.len() as u32 {
-                break;
-            }
+        let line: String = cache_lines.get(line_counter).unwrap().clone();
+        tmp_vec.push(line);
+        tmp_counter += 1;
+        if tmp_counter >= NGRAMS_PER_THREAD {
+            line_queue.lock().unwrap().push_back(tmp_vec);
+            tmp_vec = vec![];
+            tmp_counter = 0;
         }
-        print_verbose("Generating ngrams");
-        // let data_ngram = generate_ngrams(3, &tmp);
-        let data_ngram = generate_ngrams_bytes(NGRAM_SIZE, &tmp);
-        print_verbose("Done");
-        for ngram in &input_ngrams {
-            if let Some(val) = data_ngram.get(ngram) {
-                for entry in val {
-                    let e = amount_matching_ngrams.entry((*entry).clone()).or_insert(0);
-                    *e += 1;
+        line_counter += 1;
+        if line_counter == cache_lines.len() {
+            break; 
+        }
+    }
+    line_queue.lock().unwrap().push_back(tmp_vec);
+    
+    print_verbose(format!("Lenght of line queue: {}", line_queue.lock().unwrap().len()).as_str());
+
+    // loop {
+    //     print_verbose(format!("Size of hashmap: {}", amount_matching_ngrams.len()).as_str());
+    //     let mut tmp: Vec<&String> = vec![];
+    //     loop {
+    //         tmp.push(if let Some(val) = cache_lines.get(current_line as usize) {
+    //             &val
+    //         } else {
+    //             current_line += 1;
+    //             continue;
+    //         });
+    //         current_line += 1;
+    //         if current_line % MAX_NGRAMS == 0 || current_line >= cache_lines.len() as u32 {
+    //             break;
+    //         }
+    //     }
+    //     print_verbose("Generating ngrams");
+    //     // let data_ngram = generate_ngrams(3, &tmp);
+    //     let data_ngram = generate_ngrams_bytes(NGRAM_SIZE, &tmp);
+    //     print_verbose("Done");
+    //     for ngram in &input_ngrams {
+    //         if let Some(val) = data_ngram.get(ngram) {
+    //             for entry in val {
+    //                 let e = amount_matching_ngrams.entry((*entry).clone()).or_insert(0);
+    //                 *e += 1;
+    //             }
+    //         }
+    //     }
+    //     if current_line >= cache_lines.len() as u32 {
+    //         break;
+    //     }
+    // }
+
+    // Multithreading ngram creation
+    let mut handles = vec![];
+    // Spawning threads
+    for _thread_id in 0..config.thread_count {
+        let handle = thread::spawn({
+            let line_queue = line_queue.clone();
+            let input_ngrams = input_ngrams.clone();
+            let amount_matching_ngrams = amount_matching_ngrams.clone();
+            move || {
+                let mut start_vec: Vec<String>;
+                loop {
+
+                    {
+                        let mut queue = line_queue.lock().unwrap();
+                        if !queue.is_empty() {
+                            start_vec = match queue.pop_front() {
+                                Some(val) => val,
+                                None => break,
+                            };
+                        } else {
+                            break;
+                        }
+                    }
+
+                    let data_ngram = generate_ngrams_bytes(NGRAM_SIZE, &start_vec);
+                    let mut map = amount_matching_ngrams.lock().unwrap();
+                    for ngram in &input_ngrams {
+                        if let Some(val) = data_ngram.get(ngram) {
+                            for entry in val {
+                                let e = map.entry((*entry).clone()).or_insert(0);
+                                *e += 1;
+                            }
+                        }
+                    }
+                    drop(map);
+
                 }
             }
-        }
-        if current_line >= cache_line.len() as u32 {
-            break;
-        }
+        });
+        handles.push((_thread_id, handle));
+    }
+
+    for (id, handle) in handles {
+        handle.join().unwrap();
+        print_verbose(format!("Thread ID {} done", id).as_str());
     }
 
     let sort_key_val: Arc<Mutex<HashMap<String, i32>>> = Arc::new(Mutex::new(HashMap::new()));
     let handle = thread::spawn({
-        let amount_matching_ngrams = amount_matching_ngrams.clone();
+        let amount_matching_ngrams = amount_matching_ngrams.lock().unwrap().clone();
         let sort_key_val = sort_key_val.clone();
         let input = input.clone();
         move || {
             for (k, _) in &amount_matching_ngrams {
                 let lev_dist = filename_lev_distance(&k, &input);
                 let mut map = sort_key_val.lock().unwrap(); // Get mutex lock
+                // TODO: do more testing on this
+                let mut matching_ngrams = *amount_matching_ngrams.get(k).unwrap_or(&0);
+                if matching_ngrams < NGRAM_MIN_MATCHES {
+                    matching_ngrams = 0;
+                }
                 map.insert(
                     k.clone(),
                     (lev_dist * FILENAME_WEIGHT) as i32
-                        - (*amount_matching_ngrams.get(k).unwrap_or(&0) * NGRAM_WEIGHT) as i32,
+                        - (matching_ngrams * NGRAM_WEIGHT) as i32,
                 );
             }
         }
@@ -92,7 +170,8 @@ pub fn run_ngram_approach_v2(input: &String, config: &Config) {
     handle.join().unwrap();
     print_verbose("Thread done");
     print_verbose("Done creating ngrams, now filling result");
-    for (k, _) in &amount_matching_ngrams {
+    let amount_matching_ngrams_clone = amount_matching_ngrams.lock().unwrap().clone();
+    for (k, _) in &amount_matching_ngrams_clone {
         // let lev_dist = lev_dist_v2(&k, &input);
         result.push((&k, *sort_key_val.lock().unwrap().get(k).unwrap()));
     }
@@ -154,10 +233,15 @@ fn generate_ngrams<'a>(size: u32, vec: &Vec<&'a String>) -> HashMap<String, Vec<
     hmap
 }
 
+/// Generates ngrams from byte slices.
+///
+/// Returns a `HashMap<Vev<u8>, Vec<&String>>`.
+/// The `&String`'s has the same lifetime as the ones
+/// in the `Vec` that is sent in to the function.
 fn generate_ngrams_bytes<'a>(
     size: u32,
-    vec: &Vec<&'a String>,
-) -> HashMap<Vec<u8>, Vec<&'a String>> {
+    vec: &Vec<String>,
+) -> HashMap<Vec<u8>, Vec<&String>> {
     let mut hmap: HashMap<Vec<u8>, Vec<&String>> = HashMap::new();
     for entry in vec {
         if *entry == "" {
