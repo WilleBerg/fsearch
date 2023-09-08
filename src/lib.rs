@@ -17,13 +17,23 @@ const CACHE_SAVE_PATH: &str = "./";
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let file_to_find = &config.search_term;
     let nightly = config.nightly;
-    println!("File to find: {}\nNightly: {}", file_to_find, nightly);
+    
+
+    let print_verbose = if config.verbose {
+        |s: &str| {
+            println!("{}", s);
+        }
+    } else {
+        |_s: &str| {}
+    };
+    print_verbose(format!("File to find: {}\nNightly: {}", file_to_find, nightly).as_str());
 
     let root_dir = "/";
     #[cfg(target_os = "windows")]
     {
         root_dir = "C:\\";
     }
+
     let cache_path_part = Path::new(CACHE_SAVE_PATH);
     let cache_path = cache_path_part.join(CACHE_FILE_NAME);
 
@@ -31,7 +41,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         let files = fill_cache_multithread(String::from(root_dir), &cache_path, &config)?;
         write_to_cache(&cache_path, files, &config)?;
     }
-    search::run_ngram_approach_v2(&file_to_find, &config);
+    search::run_ngram_approach_v2(&file_to_find, print_verbose, &config);
     Ok(())
 }
 

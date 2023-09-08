@@ -11,15 +11,9 @@ const NGRAM_WEIGHT: u32 = 1;
 const NGRAM_MIN_MATCHES: u32 = 3;
 const NGRAMS_PER_THREAD: u32 = 1_000;
 
-pub fn run_ngram_approach_v2(input: &String, config: &Config) {
-    let print_verbose = if config.verbose {
-        |s: &str| {
-            println!("{}", s);
-        }
-    } else {
-        |_s: &str| {}
-    };
-
+pub fn run_ngram_approach_v2<F>(input: &String, print_verbose: F, config: &Config)
+where F: Fn(&str),
+{
     let mut result: Vec<(&String, i32)> = vec![];
     let amount_matching_ngrams: Arc<Mutex<HashMap<String, u32>>> = Arc::new(Mutex::new(HashMap::new()));
 
@@ -61,38 +55,6 @@ pub fn run_ngram_approach_v2(input: &String, config: &Config) {
     line_queue.lock().unwrap().push_back(tmp_vec);
     
     print_verbose(format!("Lenght of line queue: {}", line_queue.lock().unwrap().len()).as_str());
-
-    // loop {
-    //     print_verbose(format!("Size of hashmap: {}", amount_matching_ngrams.len()).as_str());
-    //     let mut tmp: Vec<&String> = vec![];
-    //     loop {
-    //         tmp.push(if let Some(val) = cache_lines.get(current_line as usize) {
-    //             &val
-    //         } else {
-    //             current_line += 1;
-    //             continue;
-    //         });
-    //         current_line += 1;
-    //         if current_line % MAX_NGRAMS == 0 || current_line >= cache_lines.len() as u32 {
-    //             break;
-    //         }
-    //     }
-    //     print_verbose("Generating ngrams");
-    //     // let data_ngram = generate_ngrams(3, &tmp);
-    //     let data_ngram = generate_ngrams_bytes(NGRAM_SIZE, &tmp);
-    //     print_verbose("Done");
-    //     for ngram in &input_ngrams {
-    //         if let Some(val) = data_ngram.get(ngram) {
-    //             for entry in val {
-    //                 let e = amount_matching_ngrams.entry((*entry).clone()).or_insert(0);
-    //                 *e += 1;
-    //             }
-    //         }
-    //     }
-    //     if current_line >= cache_lines.len() as u32 {
-    //         break;
-    //     }
-    // }
 
     // Multithreading ngram creation
     let mut handles = vec![];
