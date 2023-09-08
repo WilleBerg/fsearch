@@ -7,5 +7,11 @@ fn main() {
         println!("Problem parsing arguments: {err}");
         std::process::exit(0);
     });
-    fsearch::run(config).unwrap();
+    match fsearch::run(config) {
+        Ok(code) => std::process::exit(code),
+        Err(e) => {
+            eprintln!("Application error {}", e);
+            std::process::exit(1);
+        }
+    }
 }

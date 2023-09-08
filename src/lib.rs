@@ -12,9 +12,8 @@ pub mod config;
 pub mod search;
 
 const CACHE_FILE_NAME: &str = "cache";
-const CACHE_SAVE_PATH: &str = "./";
 
-pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+pub fn run(config: Config) -> Result<i32 ,Box<dyn Error>> {
     let file_to_find = &config.search_term;
     let nightly = config.nightly;
     
@@ -34,15 +33,15 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         root_dir = "C:\\";
     }
 
-    let cache_path_part = Path::new(CACHE_SAVE_PATH);
+    let cache_path_part = Path::new(&config.cache_path);
     let cache_path = cache_path_part.join(CACHE_FILE_NAME);
-
+    print_verbose(format!("Cache file: {}", cache_path.to_str().unwrap()).as_str());
     if !cache_exists(&cache_path, &config).expect("Error looking for cache") {
         let files = fill_cache_multithread(String::from(root_dir), &cache_path, &config)?;
         write_to_cache(&cache_path, files, &config)?;
     }
-    search::run_ngram_approach_v2(&file_to_find, print_verbose, &config);
-    Ok(())
+    search::run_ngram_approach_v2(&file_to_find, print_verbose, cache_path, &config);
+    Ok(0)
 }
 
 fn write_to_cache(

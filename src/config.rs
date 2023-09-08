@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+//use whoami;
+use std::env;
 
 pub struct Config {
     pub search_term: String,
@@ -8,6 +10,7 @@ pub struct Config {
     pub thread_count: usize,
     pub search_path: PathBuf,
     pub max_results: u32,
+    pub cache_path: String
 }
 
 impl Config {
@@ -18,6 +21,32 @@ impl Config {
         let mut verbose: bool = false;
         let mut max_results: u32 = 25;
         let mut search_path: PathBuf = std::env::current_dir().unwrap();
+
+        let user = match env::var("USER") {
+            Ok(usr) => usr,
+            Err(e) => {
+                eprintln!("{}",e);
+                return Err("Error getting username");
+            },
+        };
+        let cache_path: String;
+
+        // TODO: FIX THIS
+        #[cfg(target_os = "windows")]
+        {
+            match username() {
+                Ok(user) => {
+                    // Get the system drive (e.g., "C:") from the environment
+                    let drive = env::var("SystemDrive").unwrap_or("C:".to_string());
+
+                    // Construct the full path with drive letter
+                    let path = format!("{}\\Users\\{}\\.fsearch", drive, user);
+                    cache_path = path;
+                }
+                Err(e) => return Err("Error getting username: {e}"),
+            }
+        }
+        cache_path = format!("/home/{}/.fsearch", user);
         if args.len() < 2 {
             return Err("Not enough arguments");
         }
@@ -100,6 +129,7 @@ impl Config {
             verbose,
             search_path,
             max_results,
+            cache_path,
         })
     }
 }

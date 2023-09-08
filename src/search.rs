@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -11,7 +12,8 @@ const NGRAM_WEIGHT: u32 = 1;
 const NGRAM_MIN_MATCHES: u32 = 3;
 const NGRAMS_PER_THREAD: u32 = 1_000;
 
-pub fn run_ngram_approach_v2<F>(input: &String, print_verbose: F, config: &Config)
+// Fix this caache path stuff
+pub fn run_ngram_approach_v2<F>(input: &String, print_verbose: F,cache_path: PathBuf, config: &Config)
 where F: Fn(&str),
 {
     let mut result: Vec<(&String, i32)> = vec![];
@@ -19,7 +21,7 @@ where F: Fn(&str),
 
     print_verbose("Reading cache file");
     // TODO: Change this so cache path is passed through funciton instead.
-    let cache_lines: Vec<String> = std::fs::read_to_string("./cache")
+    let cache_lines: Vec<String> = std::fs::read_to_string(cache_path.to_str().unwrap())
         .unwrap()
         .lines()
         .map(|s| s.to_string())
