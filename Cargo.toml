@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+whoami = "1.4.1"
 walkdir = "2.3"
 regex = "1.9.1"
 once_cell = "1.18.0"
