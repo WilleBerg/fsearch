@@ -110,6 +110,12 @@ impl Config {
                                 None => break,
                             }
                         }
+                        "--help" => {
+                            print_help(max_results);
+                        }
+                        "-h" => {
+                            print_help(max_results);
+                        }
                         _ => println!("Unknown flag {}", arg),
                     }
                 }
@@ -132,4 +138,20 @@ impl Config {
             cache_path,
         })
     }
+}
+// TODO: Fix this and make sure it prints on -h
+fn print_help(max_results: u32) {
+    println!("\tfsearch <search_term> [optional flags]\n
+              fsearch \"multi word search_term\" [optional flag]\n
+              -h | --help - Prints this help text\n
+              --max-results <number> - Sets the number of printed results to
+              the number that was passed. (Default: {})\n
+              --fresh - Recreates the cache by scanning all files on your computer.
+              Do this intermittently.\n
+              --thread-count <number> - Sets the number of threads used by program to
+              the number that was passed.\n
+              --verbose - Program will print information while running. Used
+              for debugging.\n
+             ", max_results);
+    std::process::exit(0);
 }
