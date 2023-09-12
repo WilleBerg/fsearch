@@ -55,7 +55,6 @@ impl Config {
             args_iter.next();
             args_iter.next();
             let mut own_path: bool = true;
-            let mut own_thread_count: bool = false;
             let mut arg = args_iter.next().unwrap();
             loop {
                 if own_path {
@@ -85,24 +84,16 @@ impl Config {
                         }
                     }
                 }
-                if own_thread_count {
-                    thread_count = match arg.parse() {
-                        Ok(val) => val,
-                        Err(e) => {
-                            eprintln!("error parsing: {e}");
-                            std::process::exit(0);
-                        }
-                    };
-                    own_thread_count = false;
-                }
                 if arg.contains("--") {
                     match arg.as_str() {
                         "--nightly" => nightly = true,
                         "--fresh" => fresh = true,
                         "--verbose" => verbose = true,
                         "--thread-count" => {
-                            own_thread_count = true;
-                            continue;
+                            thread_count = match args_iter.next() {
+                                Some(val) => val.parse().expect("Enter a number for max results."),
+                                None => break,
+                            }
                         }
                         "--max-results" => {
                             max_results = match args_iter.next() {

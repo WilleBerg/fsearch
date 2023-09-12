@@ -139,14 +139,14 @@ fn worker_function(
                 println!("{}", q.len());
             }
         }
-        for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
-            let path = entry.path();
-
-            if !path.is_file() {
-                continue;
-            }
-
-            let path_as_string = path.as_os_str().to_str().unwrap().to_string();
+        for entry in WalkDir::new(path)
+            .same_file_system(true) // TODO: Fix this temp fix
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .map(|e| e.into_path())
+            .filter(|e| !e.is_file())
+            {
+            let path_as_string = entry.as_os_str().to_str().unwrap().to_string();
             // if path_as_string.contains(&search_term) {
             //     matching.push(path_as_string);
             // }
