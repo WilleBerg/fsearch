@@ -153,10 +153,6 @@ fn worker_function(
             .filter(|e| e.is_file())
             {
             let path_as_string = entry.as_os_str().to_str().unwrap().to_string();
-            println!("{}", path_as_string);
-            // if path_as_string.contains(&search_term) {
-            //     matching.push(path_as_string);
-            // }
             matching.push(path_as_string);
         }
     }
