@@ -136,17 +136,24 @@ fn worker_function(
             }
             path = q.pop_front().unwrap();
             if verbose {
+                println!("{}", path.to_str().unwrap());
                 println!("{}", q.len());
             }
         }
         for entry in WalkDir::new(path)
-            .same_file_system(true) // TODO: Fix this temp fix
             .into_iter()
+            .filter_entry(|e| {
+                match e.path().to_str() {
+                    Some(val) => !val.contains("Application Data/Application Data"),
+                    None => false,
+                }
+            })
             .filter_map(|e| e.ok())
             .map(|e| e.into_path())
-            .filter(|e| !e.is_file())
+            .filter(|e| e.is_file())
             {
             let path_as_string = entry.as_os_str().to_str().unwrap().to_string();
+            println!("{}", path_as_string);
             // if path_as_string.contains(&search_term) {
             //     matching.push(path_as_string);
             // }
