@@ -18,7 +18,7 @@ where F: Fn(&str),
 {
     let mut result: Vec<(&String, i32)> = vec![];
     let amount_matching_ngrams: Arc<Mutex<HashMap<String, u32>>> = Arc::new(Mutex::new(HashMap::new()));
-
+    let input_clone = input.clone();
     print_verbose("Reading cache file");
     // TODO: Change this so cache path is passed through funciton instead.
     let cache_lines: Vec<String> = std::fs::read_to_string(cache_path.to_str().unwrap())
@@ -26,9 +26,10 @@ where F: Fn(&str),
         .lines()
         .map(|s| s.to_string())
         .collect();
-
-
-    let input_ngrams = generate_ngram_bytes(NGRAM_SIZE, &input);
+    let input_ngrams = match (input_clone.len() as u32) <= NGRAM_SIZE {
+        true => generate_ngram_bytes(input_clone.len() as u32 - 1, &input),
+        false => generate_ngram_bytes(NGRAM_SIZE, &input)
+    };
 
     print_verbose("Beginning ngram creation");
     // Split up cache file in to queue of vectors of strings (1000 in each?)
@@ -66,6 +67,7 @@ where F: Fn(&str),
             let line_queue = line_queue.clone();
             let input_ngrams = input_ngrams.clone();
             let amount_matching_ngrams = amount_matching_ngrams.clone();
+            let input_clone = input_clone.clone();
             move || {
                 let mut start_vec: Vec<String>;
                 loop {
@@ -81,8 +83,10 @@ where F: Fn(&str),
                             break;
                         }
                     }
-
-                    let data_ngram = generate_ngrams_bytes(NGRAM_SIZE, &start_vec);
+                    let data_ngram = match (input_clone.len() as u32) <= NGRAM_SIZE {
+                        true => generate_ngrams_bytes(input_clone.len() as u32 - 1, &start_vec),
+                        false => generate_ngrams_bytes(NGRAM_SIZE, &start_vec),
+                    };
                     let mut map = amount_matching_ngrams.lock().unwrap();
                     for ngram in &input_ngrams {
                         if let Some(val) = data_ngram.get(ngram) {
